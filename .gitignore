@@ -1,0 +1,77 @@
+# Byte-compiled Python files
+__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+dist/
+build/
+develop-eggs/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg
+*.egg-link
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Virtual environments
+/.env
+/.venv
+
+# Testing and coverage
+.coverage
+.tox/
+htmlcov/
+.nox/
+pytest_cache/
+
+# Dependency caches
+pip-cache/
+.pip/
+*.whl
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PyCharm specific
+*.iml
+
+# Sensitive files
+*.env
+*.secrets
+.env.*
+!.env.example
+
+# Build artifacts
+*.so
+*.dll
+*.exe
+
+# Temporary files
+*~
+*.tmp
+*.swp

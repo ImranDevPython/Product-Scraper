@@ -2,13 +2,14 @@ import asyncio
 from playwright.async_api import async_playwright
 from utils.browser import BrowserManager
 from sites.amazon import AmazonScraper
+from sites.ebay import EbayScraper
 import time
 from typing import List, Dict, Any, Type
 from sites.base_scraper import BaseScraper
 
 AVAILABLE_SITES = {
     "1": ("Amazon", AmazonScraper),
-    # "2": ("eBay", EbayScraper),  # Will add later
+    "2": ("eBay", EbayScraper),  # Now added
     # "3": ("All Sites", None)      # For concurrent search
 }
 
@@ -90,8 +91,11 @@ async def display_product_details(scraper: BaseScraper, products: List[Dict[str,
         print("Product Information:")
         print("-" * 80)
         print(f"name: {product['name']}")
-        print(f"rating: {product['rating']}")
-        print(f"rating_count: {product.get('rating_count', 'Not available')}")
+        # Check if 'rating' exists before trying to print it
+        if 'rating' in product:
+            print(f"rating: {product['rating']}")
+        if 'rating_count' in product:
+            print(f"rating_count: {product.get('rating_count', 'Not available')}")
         print(f"price: {product['price']}\n")
 
         if details.get('specifications'):

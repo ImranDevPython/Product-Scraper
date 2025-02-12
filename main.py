@@ -3,14 +3,15 @@ from playwright.async_api import async_playwright
 from utils.browser import BrowserManager
 from sites.amazon import AmazonScraper
 from sites.ebay import EbayScraper
+from sites.concurrent_search import search_all_sites
 import time
 from typing import List, Dict, Any, Type
 from sites.base_scraper import BaseScraper
 
 AVAILABLE_SITES = {
     "1": ("Amazon", AmazonScraper),
-    "2": ("eBay", EbayScraper),  # Now added
-    # "3": ("All Sites", None)      # For concurrent search
+    "2": ("eBay", EbayScraper),
+    "3": ("All Sites", None)  
 }
 
 async def initialize_browser():
@@ -40,20 +41,16 @@ async def main():
         print("Invalid choice. Please try again.")
 
     async with BrowserManager() as browser_manager:
-        if choice.lower() == 'all':
-            # Will implement concurrent search later
+        if choice.lower() == 'all' or choice == '3':
+            print("\nInitializing browsers for concurrent search")
             results = await search_all_sites(browser_manager, query)
         else:
-            # Single site search
             site_name, scraper_class = AVAILABLE_SITES[choice]
             print("\nInitializing browser for", site_name)
             scraper = scraper_class(await browser_manager.new_page())
-            
-            # Measure search time
-            search_start = time.time()
             results = await scraper.search_products(query)
-            print(f"\nSearch completed in {time.time() - search_start:.2f} seconds")
-            
+            print(f"\nSearch completed in {time.time() - start_time:.2f} seconds")
+        
         if not results:
             print("No products found!")
             return
@@ -68,21 +65,25 @@ async def main():
             print("-" * 80 + "\n")
         
         # Get user choice
-        while True:
-            try:
-                choice = int(input(f"Enter the product number (1-{len(results)}) to see more details: "))
-                if 1 <= choice <= len(results):
-                    break
-                print(f"Please enter a number between 1 and {len(results)}")
-            except ValueError:
-                print("Please enter a valid number.")
-        
-        # Display product details
-        await display_product_details(scraper, results, choice, start_time)
+        choice = int(input(f"Enter the product number (1-{len(results)}) to see more details: "))
+        if 1 <= choice <= len(results):
+            product = results[choice - 1]
+            site = product.get('site')
+            if site == 'Amazon':
+                scraper = AmazonScraper(await browser_manager.new_page())
+            elif site == 'eBay':
+                scraper = EbayScraper(await browser_manager.new_page())
+            else:
+                print("No specific scraper available for displaying detailed product information.")
+                return
+
+            await display_product_details(scraper, results, choice - 1, start_time)
+        else:
+            print("Invalid product number.")
 
 async def display_product_details(scraper: BaseScraper, products: List[Dict[str, Any]], choice: int, start_time: float):
     try:
-        product = products[choice - 1]
+        product = products[choice]
         
         details_start = time.time()
         details = await scraper.get_product_details(product['url'])

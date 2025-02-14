@@ -32,6 +32,17 @@ async def main(browser_manager, page):
     # Get product search query
     query = input(f"{Fore.CYAN}Enter a product name to search: {Style.RESET_ALL}")
     
+    # Get number of products to scrape
+    while True:
+        try:
+            num_products = input(f"{Fore.CYAN}Enter number of products to scrape (1-21): {Style.RESET_ALL}")
+            num_products = int(num_products)
+            if 1 <= num_products <= 21:
+                break
+            print(f"{Fore.RED}Please enter a number between 1 and 21.{Style.RESET_ALL}")
+        except ValueError:
+            print(f"{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
+
     # Show available sites
     print(f"\n{Fore.GREEN}Available Sites:{Style.RESET_ALL}")
     for key, (site_name, _) in AVAILABLE_SITES.items():
@@ -46,12 +57,12 @@ async def main(browser_manager, page):
 
     if choice.lower() == 'all' or choice == '3':
         print(f"\n{Fore.GREEN}Initializing browsers for concurrent search{Style.RESET_ALL}")
-        results = await search_all_sites(browser_manager, query)
+        results = await search_all_sites(browser_manager, query, num_products)
     else:
         site_name, scraper_class = AVAILABLE_SITES[choice]
         print(f"\n{Fore.GREEN}Initializing browser for {site_name}{Style.RESET_ALL}")
         scraper = scraper_class(page)
-        results = await scraper.search_products(query)
+        results = await scraper.search_products(query, num_products)
         for product in results:
             product['site'] = site_name
         print(f"\n{Fore.GREEN}Search completed in {Fore.YELLOW}{time.time() - start_time:.2f}{Fore.GREEN} seconds{Style.RESET_ALL}")

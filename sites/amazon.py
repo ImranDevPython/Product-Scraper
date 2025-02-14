@@ -13,39 +13,30 @@ class AmazonScraper(BaseScraper):
     def site_name(self) -> str:
         return "Amazon"
 
-    async def search_products(self, query: str) -> List[Dict[str, Any]]:
+    async def search_products(self, query: str, num_products: int = 3) -> List[Dict[str, Any]]:
         search_url = f"{self.base_url}/s?k={quote(query)}"
         
-        # Use 'commit' for fastest initial load
-        await self.page.goto(search_url, wait_until='commit')
-        
-        products = []
         try:
-            # Wait for the grid container
-            await self.page.wait_for_selector(".s-desktop-width-max", timeout=5000)
-
-            # Get all product cards at once
-            cards = await self.page.query_selector_all('div[data-asin]:not([data-asin=""])')
+            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=10000)
+            await self.page.wait_for_selector(".s-desktop-width-max, .s-error-card", timeout=5000)
             
-            # Process first 3 valid products
-            count = 0
-            for card in cards:
-                if count >= 3:
-                    break
-                    
-                try:
-                    product = await self._extract_product_data(card)
-                    if product and product['url']:  # Only add valid products
-                        products.append(product)
-                        count += 1
-                except Exception as e:
-                    print(f"Error extracting product: {e}")
-                    continue
-                
+            # Get all cards at once
+            cards = await self.page.query_selector_all('div[data-asin]:not([data-asin=""]):nth-child(-n+'+ str(num_products + 5) +')')
+            
+            # Create tasks for all products at once
+            tasks = [self._extract_product_data(card) for card in cards[:num_products + 5]]
+            
+            # Extract all products concurrently
+            products = await asyncio.gather(*tasks)
+            
+            # Filter out None values and limit to requested number
+            valid_products = [p for p in products if p and p.get('url')][:num_products]
+            
+            return valid_products
+            
         except Exception as e:
-            print(f"Error in search: {e}")
-            
-        return products
+            print(f"Error accessing Amazon: {e}")
+            return []
 
     async def _extract_product_data(self, card) -> Dict[str, Any]:
         try:

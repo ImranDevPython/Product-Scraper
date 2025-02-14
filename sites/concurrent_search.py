@@ -2,14 +2,14 @@ from .amazon import AmazonScraper
 from .ebay import EbayScraper
 import asyncio
 
-async def search_all_sites(browser_manager, query):
+async def search_all_sites(browser_manager, query, num_products):
     # Initialize both scrapers with a new page from the browser manager
     amazon_scraper = AmazonScraper(await browser_manager.new_page())
     ebay_scraper = EbayScraper(await browser_manager.new_page())
     
     # Start both searches concurrently
-    amazon_future = amazon_scraper.search_products(query)
-    ebay_future = ebay_scraper.search_products(query)
+    amazon_future = amazon_scraper.search_products(query, num_products)
+    ebay_future = ebay_scraper.search_products(query, num_products)
     
     # Wait for both to complete
     amazon_results, ebay_results = await asyncio.gather(amazon_future, ebay_future)

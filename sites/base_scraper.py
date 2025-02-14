@@ -10,8 +10,8 @@ class BaseScraper(ABC):
         self.base_url = ""  # Each site will set its own base URL
         
     @abstractmethod
-    async def search_products(self, query: str) -> List[Dict[str, Any]]:
-        """Search for products and return first 3 valid results"""
+    async def search_products(self, query: str, num_products: int = 3) -> List[Dict[str, Any]]:
+        """Search for products and return specified number of valid results"""
         pass
         
     @abstractmethod

@@ -67,7 +67,7 @@ class BrowserManager:
         """Initialize browser with custom settings"""
         print("Initializing optimized browser...")
         self.browser = await playwright.chromium.launch(
-            headless=True,
+            headless=False,
         )
         
         self.context = await self.browser.new_context(
@@ -83,7 +83,17 @@ class BrowserManager:
     async def _setup_route_handler(self):
         """Set up route handler to block unnecessary resources"""
         async def route_handler(route: Route, request: Request):
-            if request.resource_type in ['image', 'stylesheet', 'font']:
+            # Only allow HTML and minimal required resources
+            if request.resource_type == 'document':
+                await route.continue_()
+            elif request.resource_type in ['script', 'stylesheet']:
+                # Only allow essential scripts/styles
+                if 'search' in request.url or 'product' in request.url:
+                    await route.continue_()
+                else:
+                    await route.abort()
+            elif request.resource_type in ['image', 'media', 'font']:
+                # Block all images, media, and fonts
                 await route.abort()
             else:
                 await route.continue_()

@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from playwright.async_api import Page
 from .base_scraper import BaseScraper
 import re
+import asyncio
 
 class EbayScraper(BaseScraper):
     def __init__(self, page: Page):
@@ -12,49 +13,93 @@ class EbayScraper(BaseScraper):
     def site_name(self) -> str:
         return "eBay"
 
-    async def search_products(self, query: str) -> List[Dict[str, Any]]:
+    async def search_products(self, query: str, num_products: int = 3) -> List[Dict[str, Any]]:
         search_url = f"{self.base_url}/sch/i.html?_nkw={query}"
-        await self.page.goto(search_url, wait_until='domcontentloaded')
-
-        products = []
-        product_containers = await self.page.query_selector_all("div#srp-river-results ul.srp-results.srp-list.clearfix > li:not(.srp-river-answer)")
         
-        for index, container in enumerate(product_containers):
-            if index >= 3:  # Limit to first 3 products
-                break
+        try:
+            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=10000)
+            
+            # Use a more specific selector and limit initial query
+            selector = "ul.srp-results li.s-item:nth-child(-n+" + str(num_products + 5) + ")"
+            await self.page.wait_for_selector(selector, timeout=3000)
+            
+            # Get all product containers at once
+            product_containers = await self.page.query_selector_all(selector)
+            
+            # Create tasks for all products concurrently
+            tasks = [self._extract_product_data(container) for container in product_containers[:num_products + 5]]
+            
+            # Extract all products concurrently
+            products = await asyncio.gather(*tasks)
+            
+            # Filter out None values and limit to requested number
+            valid_products = [p for p in products if p][:num_products]
+            
+            return valid_products
+            
+        except Exception as e:
+            print(f"Error accessing eBay: {e}")
+            return []
 
-            title_element = await container.query_selector("div.s-item__title span[role='heading'][aria-level='3']")
-            price_element = await container.query_selector("span.s-item__price")
-            url_element = await container.query_selector("a.s-item__link")
-            seller_record_element = await container.query_selector("span.s-item__etrs-text")
-            seller_info_element = await container.query_selector("span.s-item__seller-info-text")
-
-            title = await title_element.text_content() if title_element else "No title"
-            price = await price_element.text_content() if price_element else "No price"
-            url = await url_element.get_attribute("href") if url_element else "No URL"
-            seller_record = await seller_record_element.text_content() if seller_record_element else None
-            seller_info_text = await seller_info_element.text_content() if seller_info_element else ""
-
-            # Extract seller username, feedback rating, and feedback percentage
-            seller_username = seller_info_text.split()[0] if seller_info_text else "Unknown"
-            feedback_rating = re.search(r"\(([\d,]+)\)", seller_info_text)
-            feedback_percentage = re.search(r"([\d.]+)%", seller_info_text)
-
-            feedback_rating = feedback_rating.group(1) if feedback_rating else "No rating"
-            feedback_percentage = feedback_percentage.group(1) + "%" if feedback_percentage else "No percentage"
-
-            products.append({
-                "Name": title.strip(),
+    async def _extract_product_data(self, container) -> Dict[str, Any]:
+        try:
+            # Extract all elements concurrently
+            title_task = container.query_selector("div.s-item__title span")
+            price_task = container.query_selector("span.s-item__price")
+            url_task = container.query_selector("a.s-item__link")
+            seller_info_task = self._extract_seller_info(container)
+            
+            # Wait for all tasks to complete
+            title_elem, price_elem, url_elem, seller_info = await asyncio.gather(
+                title_task, price_task, url_task, seller_info_task
+            )
+            
+            if not all([title_elem, price_elem, url_elem]):
+                return None
+            
+            # Extract text content concurrently
+            name_task = title_elem.text_content()
+            price_task = price_elem.text_content()
+            url_task = url_elem.get_attribute("href")
+            
+            name, price, url = await asyncio.gather(name_task, price_task, url_task)
+            
+            product = {
+                "Name": name.strip(),
                 "Price": price.strip(),
-                "url": url,
-                "Seller_record": seller_record,
-                "Seller_username": seller_username,
-                "Positive_feedback_rating": feedback_rating,
-                "Positive_feedback_percentage": feedback_percentage
-            })
+                "url": url
+            }
+            
+            # Update with seller info
+            product.update(seller_info)
+            
+            return product
+            
+        except Exception as e:
+            return None
 
-
-        return products
+    async def _extract_seller_info(self, container):
+        """Helper method to extract seller information"""
+        try:
+            seller_info = {}
+            seller_info_element = await container.query_selector("span.s-item__seller-info-text")
+            if seller_info_element:
+                text = await seller_info_element.text_content()
+                seller_info["Seller_username"] = text.split()[0] if text else "Unknown"
+                
+                feedback_rating = re.search(r"\(([\d,]+)\)", text)
+                feedback_percentage = re.search(r"([\d.]+)%", text)
+                
+                seller_info["Positive_feedback_rating"] = feedback_rating.group(1) if feedback_rating else "No rating"
+                seller_info["Positive_feedback_percentage"] = feedback_percentage.group(1) + "%" if feedback_percentage else "No percentage"
+            
+            return seller_info
+        except Exception:
+            return {
+                "Seller_username": "Unknown",
+                "Positive_feedback_rating": "No rating",
+                "Positive_feedback_percentage": "No percentage"
+            }
 
     async def get_product_details(self, url: str) -> Dict[str, Any]:
         await self.page.goto(url, wait_until='domcontentloaded')

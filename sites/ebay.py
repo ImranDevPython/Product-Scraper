@@ -44,13 +44,13 @@ class EbayScraper(BaseScraper):
             feedback_percentage = feedback_percentage.group(1) + "%" if feedback_percentage else "No percentage"
 
             products.append({
-                "name": title.strip(),
-                "price": price.strip(),
+                "Name": title.strip(),
+                "Price": price.strip(),
                 "url": url,
-                "seller_record": seller_record,
-                "seller_username": seller_username,
-                "positive_feedback_rating": feedback_rating,
-                "positive_feedback_percentage": feedback_percentage
+                "Seller_record": seller_record,
+                "Seller_username": seller_username,
+                "Positive_feedback_rating": feedback_rating,
+                "Positive_feedback_percentage": feedback_percentage
             })
 
 

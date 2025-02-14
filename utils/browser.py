@@ -67,7 +67,7 @@ class BrowserManager:
         """Initialize browser with custom settings"""
         print("Initializing optimized browser...")
         self.browser = await playwright.chromium.launch(
-            headless=False,
+            headless=True,
         )
         
         self.context = await self.browser.new_context(

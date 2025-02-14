@@ -72,10 +72,10 @@ class AmazonScraper(BaseScraper):
                 url = f"{self.base_url}{url}" if url.startswith('/') else url
 
             return {
-                "name": name,
-                "rating": rating.strip(),
-                "rating_count": rating_count.strip(),
-                "price": price.strip(),
+                "Name": name,
+                "Rating": rating.strip(),
+                "Rating_count": rating_count.strip(),
+                "Price": price.strip(),
                 "url": url
             }
         except Exception as e:
@@ -117,15 +117,15 @@ class AmazonScraper(BaseScraper):
         try:
             name_elem = await self.page.wait_for_selector('h2.a-size-medium.a-text-normal, h2.a-size-medium.a-text-normal > span', timeout=3000)
             if name_elem:
-                info['name'] = (await name_elem.text_content()).strip()
+                info['Name'] = (await name_elem.text_content()).strip()
         except:
             pass
         
         # Get other basic elements if available
         for selector, key in [
-            ("span.a-icon-alt", 'rating'),
-            ("#acrCustomerReviewText", 'rating_count'),
-            ("span.a-price > span.a-offscreen", 'price')
+            ("span.a-icon-alt", 'Rating'),
+            ("#acrCustomerReviewText", 'Rating_count'),
+            ("span.a-price > span.a-offscreen", 'Price')
         ]:
             try:
                 elem = await self.page.query_selector(selector)

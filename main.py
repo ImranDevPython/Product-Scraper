@@ -7,6 +7,10 @@ from sites.concurrent_search import search_all_sites
 import time
 from typing import List, Dict, Any, Type
 from sites.base_scraper import BaseScraper
+from colorama import init, Fore, Back, Style
+
+# Initialize colorama
+init(autoreset=True)
 
 AVAILABLE_SITES = {
     "1": ("Amazon", AmazonScraper),
@@ -21,65 +25,71 @@ async def initialize_browser():
     page = await browser_manager.new_page()
     return browser_manager, playwright, page
 
-async def main():
-    print("\n=== Starting optimized scraper ===\n")
+async def main(browser_manager, page):
+    print(f"\n{Back.BLUE}{Fore.WHITE} === Starting optimized scraper === {Style.RESET_ALL}\n")
     start_time = time.time()
 
     # Get product search query
-    query = input("Enter a product name to search: ")
+    query = input(f"{Fore.CYAN}Enter a product name to search: {Style.RESET_ALL}")
     
     # Show available sites
-    print("\nAvailable Sites:")
+    print(f"\n{Fore.GREEN}Available Sites:{Style.RESET_ALL}")
     for key, (site_name, _) in AVAILABLE_SITES.items():
-        print(f"{key}. {site_name}")
+        print(f"{Fore.YELLOW}{key}. {site_name}{Style.RESET_ALL}")
     
     # Get site choice
     while True:
-        choice = input("\nChoose a site (enter number) or 'all' for concurrent search: ")
+        choice = input(f"\n{Fore.CYAN}Choose a site (enter number) or 'all' for concurrent search: {Style.RESET_ALL}")
         if choice in AVAILABLE_SITES or choice.lower() == 'all':
             break
-        print("Invalid choice. Please try again.")
+        print(f"{Fore.RED}Invalid choice. Please try again.{Style.RESET_ALL}")
 
-    async with BrowserManager() as browser_manager:
-        if choice.lower() == 'all' or choice == '3':
-            print("\nInitializing browsers for concurrent search")
-            results = await search_all_sites(browser_manager, query)
-        else:
-            site_name, scraper_class = AVAILABLE_SITES[choice]
-            print("\nInitializing browser for", site_name)
-            scraper = scraper_class(await browser_manager.new_page())
-            results = await scraper.search_products(query)
-            print(f"\nSearch completed in {time.time() - start_time:.2f} seconds")
-        
-        if not results:
-            print("No products found!")
-            return
-        
-        # Display results as they come
-        print("\nProducts Found:\n")
-        for i, product in enumerate(results, 1):
-            print(f"Product {i}:")
-            for key, value in product.items():
-                if key != 'url':  # Don't print the long URL
-                    print(f"{key}: {value}")
-            print("-" * 80 + "\n")
-        
-        # Get user choice
-        choice = int(input(f"Enter the product number (1-{len(results)}) to see more details: "))
-        if 1 <= choice <= len(results):
-            product = results[choice - 1]
-            site = product.get('site')
-            if site == 'Amazon':
-                scraper = AmazonScraper(await browser_manager.new_page())
-            elif site == 'eBay':
-                scraper = EbayScraper(await browser_manager.new_page())
-            else:
-                print("No specific scraper available for displaying detailed product information.")
-                return
+    if choice.lower() == 'all' or choice == '3':
+        print(f"\n{Fore.GREEN}Initializing browsers for concurrent search{Style.RESET_ALL}")
+        results = await search_all_sites(browser_manager, query)
+    else:
+        site_name, scraper_class = AVAILABLE_SITES[choice]
+        print(f"\n{Fore.GREEN}Initializing browser for {site_name}{Style.RESET_ALL}")
+        scraper = scraper_class(page)
+        results = await scraper.search_products(query)
+        for product in results:
+            product['site'] = site_name
+        print(f"\n{Fore.GREEN}Search completed in {Fore.YELLOW}{time.time() - start_time:.2f}{Fore.GREEN} seconds{Style.RESET_ALL}")
+    
+    if not results:
+        print(f"{Fore.RED}No products found!{Style.RESET_ALL}")
+        return
+    
+    # Display results as they come
+    print(f"\n{Fore.GREEN}Products Found:{Style.RESET_ALL}\n")
+    for i, product in enumerate(results, 1):
+        print(f"{Back.BLUE}{Fore.WHITE} Product {i}: {Style.RESET_ALL}")
+        for key, value in product.items():
+            if key != 'url':  # Don't print the long URL
+                print(f"{Fore.YELLOW}{key}: {Style.RESET_ALL}{value}")
+        print(f"{Fore.BLUE}{'-' * 80}{Style.RESET_ALL}\n")
+    
+    # Get user choice
+    while True:
+        try:
+            choice = int(input(f"{Fore.CYAN}Enter the product number (1-{len(results)}) to see more details: {Style.RESET_ALL}"))
+            if 1 <= choice <= len(results):
+                break
+            print(f"{Fore.RED}Invalid product number. Please enter a number between 1 and {len(results)}.{Style.RESET_ALL}")
+        except ValueError:
+            print(f"{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
 
-            await display_product_details(scraper, results, choice - 1, start_time)
-        else:
-            print("Invalid product number.")
+    product = results[choice - 1]
+    site = product.get('site')
+    if site == 'Amazon':
+        scraper = AmazonScraper(page)
+    elif site == 'eBay':
+        scraper = EbayScraper(page)
+    else:
+        print(f"{Fore.RED}No specific scraper available for displaying detailed product information.{Style.RESET_ALL}")
+        return
+
+    await display_product_details(scraper, results, choice - 1, start_time)
 
 async def display_product_details(scraper: BaseScraper, products: List[Dict[str, Any]], choice: int, start_time: float):
     try:
@@ -87,34 +97,61 @@ async def display_product_details(scraper: BaseScraper, products: List[Dict[str,
         
         details_start = time.time()
         details = await scraper.get_product_details(product['url'])
-        print(f"\nDetails fetched in {time.time() - details_start:.2f} seconds\n")
+        print(f"\n{Fore.GREEN}Details fetched in {Fore.YELLOW}{time.time() - details_start:.2f}{Fore.GREEN} seconds{Style.RESET_ALL}\n")
         
-        print("Product Information:")
-        print("-" * 80)
-        print(f"name: {product['name']}")
-        # Check if 'rating' exists before trying to print it
-        if 'rating' in product:
-            print(f"rating: {product['rating']}")
-        if 'rating_count' in product:
-            print(f"rating_count: {product.get('rating_count', 'Not available')}")
-        print(f"price: {product['price']}\n")
+        print(f"{Back.BLUE}{Fore.WHITE} Product Information: {Style.RESET_ALL}")
+        print(f"{Fore.BLUE}{'-' * 80}{Style.RESET_ALL}")
+        
+        # Display all available product information
+        if product.get('site') == 'eBay':
+            # eBay-specific information display
+            basic_info = {
+                'Name': product['Name'],
+                'Price': product['Price'],
+                'Seller Username': product['Seller_username'],
+                'Seller Record': product.get('Seller_record', 'Not available'),
+                'Positive Feedback Rating': product['Positive_feedback_rating'],
+                'Positive Feedback Percentage': product['Positive_feedback_percentage']
+            }
+        else:
+            # Default/Amazon information display
+            basic_info = {
+                'Name': product['Name'],
+                'Rating': product.get('Rating', 'Not available'),
+                'Rating_count': product.get('Rating_count', 'Not available'),
+                'Price': product['Price']
+            }
+        
+        # Display basic information
+        for key, value in basic_info.items():
+            if value != 'Not available':
+                print(f"{Fore.YELLOW}{key}: {Style.RESET_ALL}{value}")
+        print()
 
+        # Display specifications if available
         if details.get('specifications'):
-            print("Specifications:")
+            print(f"{Back.BLUE}{Fore.WHITE} Specifications: {Style.RESET_ALL}")
             for key, value in details['specifications'].items():
-                print(f"{key}: {value}")
+                print(f"{Fore.GREEN}{key}: {Style.RESET_ALL}{value}")
             print()
 
+        # Display special features if available
         if details.get('special_features'):
-            print("Special Features:")
+            print(f"{Back.BLUE}{Fore.WHITE} Special Features: {Style.RESET_ALL}")
             for feature in details['special_features']:
-                print(f"• {feature}")
+                print(f"{Fore.GREEN}• {Style.RESET_ALL}{feature}")
             print()
 
     except Exception as e:
-        print(f"Error displaying product details: {e}")
+        print(f"{Fore.RED}Error displaying product details: {e}{Style.RESET_ALL}")
     finally:
-        print(f"\nTotal execution time: {time.time() - start_time:.2f} seconds")
+        print(f"\n{Fore.GREEN}Total execution time: {Fore.YELLOW}{time.time() - start_time:.2f}{Fore.GREEN} seconds{Style.RESET_ALL}")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    loop = asyncio.get_event_loop()
+    browser_manager, playwright, page = loop.run_until_complete(initialize_browser())
+    try:
+        loop.run_until_complete(main(browser_manager, page))
+    finally:
+        loop.run_until_complete(playwright.stop())  # Ensure playwright is properly closed
+        loop.close()  # Close the event loop

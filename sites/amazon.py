@@ -17,26 +17,142 @@ class AmazonScraper(BaseScraper):
         search_url = f"{self.base_url}/s?k={quote(query)}"
         
         try:
-            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=10000)
+            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=15000)
             await self.page.wait_for_selector(".s-desktop-width-max, .s-error-card", timeout=5000)
             
-            # Get all cards at once
-            cards = await self.page.query_selector_all('div[data-asin]:not([data-asin=""]):nth-child(-n+'+ str(num_products + 5) +')')
+            # Extract all products in one JavaScript execution
+            products = await self.page.evaluate(f"""
+                () => {{
+                    const products = [];
+                    const cards = document.querySelectorAll('div[data-asin]:not([data-asin=""]):nth-child(-n+{num_products + 10})');
+                    
+                    for (const card of cards) {{
+                        try {{
+                            if (card.querySelector('[data-component-type="sp-sponsored-result"]')) {{
+                                continue;
+                            }}
+                            
+                            const nameElem = card.querySelector('h2.a-size-medium.a-text-normal, h2.a-size-medium.a-text-normal > span') || 
+                                           card.querySelector('h2.a-size-base-plus, h2.a-size-base-plus > span');
+                            const ratingElem = card.querySelector('span.a-icon-alt');
+                            const ratingCountElem = card.querySelector('span.a-size-base');
+                            const priceElem = card.querySelector('span.a-price > span.a-offscreen');
+                            const urlElem = card.querySelector('a[href*="/dp/"]');
+                            
+                            if (nameElem && urlElem) {{
+                                products.push({{
+                                    Name: (nameElem.getAttribute('aria-label') || nameElem.textContent).trim(),
+                                    Rating: ratingElem ? ratingElem.textContent.trim() : 'N/A',
+                                    Rating_count: ratingCountElem ? ratingCountElem.textContent.trim() : 'N/A',
+                                    Price: priceElem ? priceElem.textContent.trim() : 'N/A',
+                                    url: urlElem.href
+                                }});
+                            }}
+                            
+                            if (products.length >= {num_products}) {{
+                                break;
+                            }}
+                        }} catch (e) {{
+                            continue;
+                        }}
+                    }}
+                    
+                    return products.slice(0, {num_products});
+                }}
+            """)
             
-            # Create tasks for all products at once
-            tasks = [self._extract_product_data(card) for card in cards[:num_products + 5]]
-            
-            # Extract all products concurrently
-            products = await asyncio.gather(*tasks)
-            
-            # Filter out None values and limit to requested number
-            valid_products = [p for p in products if p and p.get('url')][:num_products]
-            
-            return valid_products
+            return products
             
         except Exception as e:
             print(f"Error accessing Amazon: {e}")
             return []
+
+    async def get_product_details(self, url: str) -> Dict[str, Any]:
+        try:
+            await self.page.goto(url, wait_until='domcontentloaded')
+            
+            details = await self.page.evaluate("""
+                () => {
+                    const specs = {};
+                    const features = new Set();
+                    
+                    // Get specifications from the product details section
+                    const specSelectors = [
+                        '#productDetails_techSpec_section_1 tr',
+                        '#productDetails_detailBullets_sections1 tr',
+                        '#detailBullets_feature_div span.a-list-item'
+                    ];
+                    
+                    specSelectors.forEach(selector => {
+                        document.querySelectorAll(selector).forEach(row => {
+                            try {
+                                if (selector.includes('tr')) {
+                                    const label = row.querySelector('th');
+                                    const value = row.querySelector('td');
+                                    if (label && value) {
+                                        const labelText = label.textContent.trim().replace(/\\n/g, '').replace(/:/g, '');
+                                        const valueText = value.textContent.trim().replace(/\\n/g, '');
+                                        if (!labelText.includes('ASIN') && 
+                                            !labelText.includes('Customer Reviews') && 
+                                            !labelText.includes('Best Sellers Rank')) {
+                                            specs[labelText] = valueText;
+                                        }
+                                    }
+                                } else {
+                                    const text = row.textContent.trim();
+                                    if (text.includes(':')) {
+                                        const [label, value] = text.split(':').map(s => s.trim());
+                                        if (label && value && 
+                                            !label.includes('ASIN') && 
+                                            !label.includes('Customer Reviews') && 
+                                            !label.includes('Best Sellers Rank')) {
+                                            specs[label] = value;
+                                        }
+                                    }
+                                }
+                            } catch (e) {}
+                        });
+                    });
+                    
+                    // Get features from bullet points
+                    document.querySelectorAll('#feature-bullets ul li span.a-list-item').forEach(item => {
+                        const text = item.textContent.trim();
+                        if (text && 
+                            !text.startsWith('›') && 
+                            text.length > 10 && 
+                            !text.includes('Flash Player') &&
+                            !text.includes('star') &&
+                            !text.includes('Computers & Accessories') &&
+                            !text.includes('Traditional Laptops')) {
+                            features.add(text.replace(/\\s+/g, ' ')
+                                           .replace(/\[\s+/g, '[')
+                                           .replace(/\s+\]/g, ']'));
+                        }
+                    });
+                    
+                    return {
+                        specifications: specs,
+                        special_features: Array.from(features)
+                    };
+                }
+            """)
+            
+            # Clean and sort features
+            cleaned_features = []
+            for feature in details['special_features']:
+                if not any(x in feature.lower() for x in ['var', 'function', 'window', 'javascript']):
+                    cleaned_features.append(feature)
+            
+            details['special_features'] = sorted(
+                cleaned_features,
+                key=lambda x: (not x.startswith('['), x)
+            )
+            
+            return details
+            
+        except Exception as e:
+            print(f"Error extracting product details: {e}")
+            return {"specifications": {}, "special_features": []}
 
     async def _extract_product_data(self, card) -> Dict[str, Any]:
         try:
@@ -73,34 +189,6 @@ class AmazonScraper(BaseScraper):
             print(f"Error extracting product data: {e}")
             return None
 
-    async def get_product_details(self, url: str) -> Dict[str, Any]:
-        # Use 'commit' for fastest initial load
-        await self.page.goto(url, wait_until='commit')
-        
-        details = {}
-        
-        try:
-            # Extract only specifications and features in parallel
-            specs_task = asyncio.create_task(self._extract_specifications())
-            features_task = asyncio.create_task(self._extract_features())
-            
-            # Wait for both tasks with timeout
-            specs, features = await asyncio.gather(
-                specs_task,
-                features_task,
-                return_exceptions=True
-            )
-            
-            if not isinstance(specs, Exception):
-                details['specifications'] = specs
-            if not isinstance(features, Exception):
-                details['special_features'] = features
-                
-        except Exception as e:
-            print(f"Error extracting product details: {e}")
-            
-        return details
-    
     async def _extract_basic_info(self) -> Dict[str, str]:
         info = {}
         

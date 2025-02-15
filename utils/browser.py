@@ -51,6 +51,7 @@ class BrowserManager:
             category: re.compile(pattern, re.IGNORECASE) 
             for category, pattern in ALLOWED_RESOURCES.items()
         }
+        self.route_handlers = []  # Track route handlers
     
     async def __aenter__(self):
         """Async context manager entry"""
@@ -67,7 +68,7 @@ class BrowserManager:
         """Initialize browser with custom settings"""
         print("Initializing optimized browser...")
         self.browser = await playwright.chromium.launch(
-            headless=False,
+            headless=True,
         )
         
         self.context = await self.browser.new_context(
@@ -83,21 +84,27 @@ class BrowserManager:
     async def _setup_route_handler(self):
         """Set up route handler to block unnecessary resources"""
         async def route_handler(route: Route, request: Request):
-            # Only allow HTML and minimal required resources
-            if request.resource_type == 'document':
-                await route.continue_()
-            elif request.resource_type in ['script', 'stylesheet']:
-                # Only allow essential scripts/styles
-                if 'search' in request.url or 'product' in request.url:
+            try:
+                if request.resource_type == 'document':
                     await route.continue_()
-                else:
+                elif request.resource_type in ['script', 'stylesheet']:
+                    if 'search' in request.url or 'product' in request.url:
+                        await route.continue_()
+                    else:
+                        await route.abort()
+                elif request.resource_type in ['image', 'media', 'font']:
                     await route.abort()
-            elif request.resource_type in ['image', 'media', 'font']:
-                # Block all images, media, and fonts
-                await route.abort()
-            else:
-                await route.continue_()
-                
+                else:
+                    await route.continue_()
+            except Exception as e:
+                print(f"Error in route handler: {e}")
+                try:
+                    await route.continue_()
+                except:
+                    pass
+
+        # Store handler reference
+        self.route_handlers.append(route_handler)
         await self.context.route('**/*', route_handler)
 
     async def new_page(self) -> Page:
@@ -106,9 +113,21 @@ class BrowserManager:
 
     async def close(self):
         """Close all browser resources"""
-        if self.context:
-            await self.context.close()
-        if self.browser:
-            await self.browser.close()
-        if self.playwright:
-            await self.playwright.stop() 
+        try:
+            # Unroute all handlers
+            if self.context and self.route_handlers:
+                for handler in self.route_handlers:
+                    try:
+                        await self.context.unroute('**/*', handler)
+                    except Exception as e:
+                        print(f"Error unrouting handler: {e}")
+
+            # Close context and browser
+            if self.context:
+                await self.context.close()
+            if self.browser:
+                await self.browser.close()
+            if self.playwright:
+                await self.playwright.stop()
+        except Exception as e:
+            print(f"Error during browser cleanup: {e}") 

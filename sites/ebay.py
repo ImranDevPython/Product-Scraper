@@ -17,25 +17,46 @@ class EbayScraper(BaseScraper):
         search_url = f"{self.base_url}/sch/i.html?_nkw={query}"
         
         try:
-            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=10000)
+            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=15000)
+            await self.page.wait_for_selector("ul.srp-results", timeout=5000)
             
-            # Use a more specific selector and limit initial query
-            selector = "ul.srp-results li.s-item:nth-child(-n+" + str(num_products + 5) + ")"
-            await self.page.wait_for_selector(selector, timeout=3000)
+            # Extract all products in one JavaScript execution
+            products = await self.page.evaluate(f"""
+                () => {{
+                    const products = [];
+                    const containers = document.querySelectorAll('ul.srp-results li.s-item:nth-child(-n+{num_products + 5})');
+                    
+                    for (const container of containers) {{
+                        try {{
+                            const titleElem = container.querySelector('div.s-item__title span');
+                            const priceElem = container.querySelector('span.s-item__price');
+                            const urlElem = container.querySelector('a.s-item__link');
+                            const sellerInfoElem = container.querySelector('span.s-item__seller-info-text');
+                            
+                            if (titleElem && priceElem && urlElem) {{
+                                const sellerInfo = sellerInfoElem ? sellerInfoElem.textContent : '';
+                                const feedbackMatch = sellerInfo.match(/\\(([\d,]+)\\)/);
+                                const percentageMatch = sellerInfo.match(/([\d.]+)%/);
+                                
+                                products.push({{
+                                    Name: titleElem.textContent.trim(),
+                                    Price: priceElem.textContent.trim(),
+                                    url: urlElem.href,
+                                    Seller_username: sellerInfo ? sellerInfo.split(' ')[0] : 'Unknown',
+                                    Positive_feedback_rating: feedbackMatch ? feedbackMatch[1] : 'No rating',
+                                    Positive_feedback_percentage: percentageMatch ? percentageMatch[1] + '%' : 'No percentage'
+                                }});
+                            }}
+                        }} catch (e) {{
+                            continue;
+                        }}
+                    }}
+                    
+                    return products.slice(0, {num_products});
+                }}
+            """)
             
-            # Get all product containers at once
-            product_containers = await self.page.query_selector_all(selector)
-            
-            # Create tasks for all products concurrently
-            tasks = [self._extract_product_data(container) for container in product_containers[:num_products + 5]]
-            
-            # Extract all products concurrently
-            products = await asyncio.gather(*tasks)
-            
-            # Filter out None values and limit to requested number
-            valid_products = [p for p in products if p][:num_products]
-            
-            return valid_products
+            return products
             
         except Exception as e:
             print(f"Error accessing eBay: {e}")
@@ -103,26 +124,44 @@ class EbayScraper(BaseScraper):
 
     async def get_product_details(self, url: str) -> Dict[str, Any]:
         await self.page.goto(url, wait_until='domcontentloaded')
-        details = {"special_features": []}  # Initialize the special features list
-
-        # Extract specifications
-        spec_sections = await self.page.query_selector_all("div[data-testid='ux-layout-section-evo__item'] dl[data-testid='ux-labels-values']")
-        specifications = {}
-        for section in spec_sections:
-            labels = await section.query_selector_all("dt span.ux-textspans")
-            values = await section.query_selector_all("dd span.ux-textspans")
-
-            for label, value in zip(labels, values):
-                spec_key = await label.text_content()
-                spec_value = await value.text_content()
-                spec_key = spec_key.strip()
-                spec_value = spec_value.strip()
-                specifications[spec_key] = spec_value
-
-                # Check if the label is 'features' and process it as special features
-                if spec_key.lower() == 'features':
-                    details['special_features'].extend([f.strip() for f in spec_value.split(',')])
-
-        details['specifications'] = specifications
-
-        return details
+        
+        try:
+            # Extract everything in one JavaScript execution
+            details = await self.page.evaluate("""
+                () => {
+                    const specs = {};
+                    const features = [];
+                    
+                    // Get all specification sections
+                    const sections = document.querySelectorAll("div[data-testid='ux-layout-section-evo__item'] dl[data-testid='ux-labels-values']");
+                    sections.forEach(section => {
+                        const labels = section.querySelectorAll("dt span.ux-textspans");
+                        const values = section.querySelectorAll("dd span.ux-textspans");
+                        
+                        labels.forEach((label, index) => {
+                            if (values[index]) {
+                                const key = label.textContent.trim();
+                                const value = values[index].textContent.trim();
+                                
+                                // Extract features but don't add to specs
+                                if (key.toLowerCase() === 'features') {
+                                    features.push(...value.split(',').map(f => f.trim()));
+                                } else {
+                                    specs[key] = value;
+                                }
+                            }
+                        });
+                    });
+                    
+                    return {
+                        specifications: specs,
+                        special_features: features
+                    };
+                }
+            """)
+            
+            return details
+            
+        except Exception as e:
+            print(f"Error extracting product details: {e}")
+            return {"specifications": {}, "special_features": []}

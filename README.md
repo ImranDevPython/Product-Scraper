@@ -22,29 +22,33 @@ A high-performance, concurrent web scraper for Amazon and eBay built with Python
 ## Installation
 
 1. Clone the repository
-bash
-git clone https://github.com/ImranDevPython/Product-Scraper.git
-cd Product-Scraper
+   ```bash
+   git clone https://github.com/ImranDevPython/Product-Scraper.git
+   cd Product-Scraper
+   ```
 
 2. Create and activate a virtual environment
-bash
-python -m venv venv
-source venv/Scripts/Activate.ps1 # On Windows: venv\Scripts\activate
+   ```bash
+   python -m venv venv
+   source venv/Scripts/Activate.ps1 # On Windows: venv\Scripts\activate
+   ```
 
 3. Install dependencies
-bash
-pip install -r requirements.txt
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 4. Install Playwright browsers
-bash
-playwright install chromium
+   ```bash
+   playwright install chromium
+   ```
 
 ## Usage
 
 1. Run the scraper
-bash
-python main.py
-
+   ```bash
+   python main.py
+   ```
 
 2. Choose your options:
    - Select a specific site (Amazon or eBay)

@@ -17,8 +17,8 @@ class EbayScraper(BaseScraper):
         search_url = f"{self.base_url}/sch/i.html?_nkw={query}"
         
         try:
-            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=15000)
-            await self.page.wait_for_selector("ul.srp-results", timeout=5000)
+            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=30000)
+            await self.page.wait_for_selector("ul.srp-results", timeout=3000)
             
             # Extract all products in one JavaScript execution
             products = await self.page.evaluate(f"""

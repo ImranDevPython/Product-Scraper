@@ -17,8 +17,8 @@ class AmazonScraper(BaseScraper):
         search_url = f"{self.base_url}/s?k={quote(query)}"
         
         try:
-            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=15000)
-            await self.page.wait_for_selector(".s-desktop-width-max, .s-error-card", timeout=5000)
+            await self.page.goto(search_url, wait_until='domcontentloaded', timeout=30000)
+            await self.page.wait_for_selector(".s-desktop-width-max, .s-error-card", timeout=30000)
             
             # Extract all products in one JavaScript execution
             products = await self.page.evaluate(f"""

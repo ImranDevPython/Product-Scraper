@@ -1,0 +1,4 @@
+playwright>=1.39.0
+asyncio>=3.4.3
+colorama>=0.4.6
+aiohttp>=3.8.1

@@ -15,10 +15,10 @@ A high-performance, concurrent web scraper for Amazon and eBay built with Python
 ## Screenshots
 
 ### Search Interface
-![Search Interface](screenshots/capture1.png)
+![Search Interface](screenshots/Capture1.PNG)
 
 ### Product Details
-![Product Details](screenshots/capture2.png)
+![Product Details](screenshots/Capture2.PNG)
 
 ## Performance
 

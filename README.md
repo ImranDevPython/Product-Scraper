@@ -12,6 +12,14 @@ A high-performance, concurrent web scraper for Amazon and eBay built with Python
 - 🔍 Smart filtering of sponsored products
 - 📱 Responsive design that works with different product layouts
 
+## Screenshots
+
+### Search Interface
+![Search Interface](screenshots/capture1.png)
+
+### Product Details
+![Product Details](screenshots/capture2.png)
+
 ## Performance
 
 - Concurrent scraping reduces search time by up to 50%
